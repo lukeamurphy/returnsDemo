@@ -311,6 +311,7 @@ const EditRuleForm = ({ rule, onSave, onCancel }) => {
     }));
   };
 
+
   const handleConditionChange = (field, value) => {
     setEditedRule(prev => ({
       ...prev,
@@ -802,14 +803,6 @@ export default function App() {
                         ))}
                       </div>
                     )
-                  },
-                  {
-                    label: "View JSON",
-                    content: (
-                      <pre className="bg-gray-100 p-4 rounded text-sm overflow-x-auto">
-                        {JSON.stringify(rules, null, 2)}
-                      </pre>
-                    ),
                   },
                   {
                     label: "Add Rule",
