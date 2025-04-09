@@ -190,6 +190,7 @@ const TabView = ({ tabs }) => {
   );
 };
 const RuleForm = ({ onAdd, schemas }) => {
+  const [name, setName] = useState("");
   const [entity, setEntity] = useState("order");
   const [field, setField] = useState("");
   const [operator, setOperator] = useState("");
@@ -203,29 +204,38 @@ const RuleForm = ({ onAdd, schemas }) => {
     if (!entity || !field || !operator || value === "" || !actionType || !message) return;
 
     const newRule = {
-      name: `Custom Rule (${entity}.${field})`,
+      name: name || `Custom Rule (${entity}.${field})`,
       key: `custom_${Date.now()}`,
-      priority,
-      phase,
       condition: {
         entity,
         field,
         operator,
-        value: isNaN(value) ? value : Number(value)
+        value: isNaN(value) ? value : Number(value),
       },
+      phase,
+      priority,
       action: {
         type: actionType,
         message,
-        icon: actions[actionType]?.icon || "🔧"
+        icon: actions[actionType]?.icon || "🔧",
       }
     };
 
     onAdd(newRule);
-    setEntity("order"); setField(""); setOperator(""); setValue(""); setActionType(""); setMessage("");
+    setName("Name"); setEntity("order"); setField(""); setOperator(""); setValue(""); setActionType(""); setMessage("");
   };
 
   return (
     <div className="space-y-3">
+      <div>
+  <label className="text-sm font-semibold block">Name</label>
+  <input
+    className="w-full p-2 border rounded"
+    value={name}
+    onChange={(e) => setName(e.target.value)}
+    placeholder="e.g. Require Manual Approval"
+/>
+</div>
       <div>
         <label className="text-sm font-semibold block">Entity</label>
         <select className="w-full p-2 border rounded" value={entity} onChange={(e) => { setEntity(e.target.value); setField(""); }}>
