@@ -7,7 +7,20 @@ import inventory from './data/inventory';
 import carriers from './data/carriers';
 import ConfigBox from './configBox';
 import logo from "./by-logo.png";
+import { schemas } from './data/schemas';
+import { actions } from './data/actions';
 
+const Modal = ({ title, content, onClose }) => (
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-lg shadow-lg max-w-xl w-full">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold">{title}</h3>
+        <button onClick={onClose} className="text-gray-500 hover:text-black">&times;</button>
+      </div>
+      <div>{content}</div>
+    </div>
+  </div>
+);
 
 const applyRules = (order, rules, warehouses, initialDropOffStore) => {
   let dropOffStore = initialDropOffStore;
@@ -176,7 +189,201 @@ const TabView = ({ tabs }) => {
     </div>
   );
 };
+const RuleForm = ({ onAdd, schemas }) => {
+  const [entity, setEntity] = useState("order");
+  const [field, setField] = useState("");
+  const [operator, setOperator] = useState("");
+  const [value, setValue] = useState("");
+  const [actionType, setActionType] = useState("");
+  const [priority, setPriority] = useState(1);
+  const [phase, setPhase] = useState("initiation");
+  const [message, setMessage] = useState("");
 
+  const handleSubmit = () => {
+    if (!entity || !field || !operator || value === "" || !actionType || !message) return;
+
+    const newRule = {
+      name: `Custom Rule (${entity}.${field})`,
+      key: `custom_${Date.now()}`,
+      priority,
+      phase,
+      condition: {
+        entity,
+        field,
+        operator,
+        value: isNaN(value) ? value : Number(value)
+      },
+      action: {
+        type: actionType,
+        message,
+        icon: actions[actionType]?.icon || "🔧"
+      }
+    };
+
+    onAdd(newRule);
+    setEntity("order"); setField(""); setOperator(""); setValue(""); setActionType(""); setMessage("");
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-sm font-semibold block">Entity</label>
+        <select className="w-full p-2 border rounded" value={entity} onChange={(e) => { setEntity(e.target.value); setField(""); }}>
+          {Object.keys(schemas).map((key) => (
+            <option key={key} value={key}>{key}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Field</label>
+        <select className="w-full p-2 border rounded" value={field} onChange={(e) => setField(e.target.value)}>
+          <option value="">Select field</option>
+          {(schemas[entity] || []).map((f, i) => (
+            <option key={i} value={f}>{f}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Operator</label>
+        <select className="w-full p-2 border rounded" value={operator} onChange={(e) => setOperator(e.target.value)}>
+          <option value="">Select operator</option>
+          <option value="equals">equals</option>
+          <option value="less_than">less_than</option>
+          <option value="greater_than">greater_than</option>
+          <option value="older_than_days">older_than_days</option>
+        </select>
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Value</label>
+        <input className="w-full p-2 border rounded" value={value} onChange={(e) => setValue(e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Action Type</label>
+        <select
+          className="w-full p-2 border rounded"
+          value={actionType}
+          onChange={(e) => {
+            setActionType(e.target.value);
+            if (actions[e.target.value]) {
+              setMessage(actions[e.target.value].description);
+            }
+          }}
+        >
+          <option value="">Select action</option>
+          {Object.entries(actions).map(([key, val]) => (
+            <option key={key} value={key}>{val.label}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Message</label>
+        <input className="w-full p-2 border rounded" value={message} onChange={(e) => setMessage(e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Priority</label>
+        <input type="number" className="w-full p-2 border rounded" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Phase</label>
+        <select className="w-full p-2 border rounded" value={phase} onChange={(e) => setPhase(e.target.value)}>
+          <option value="initiation">Initiation</option>
+          <option value="post_dropoff">Post-Dropoff</option>
+          <option value="processing">Processing</option>
+        </select>
+      </div>
+      <button
+        onClick={handleSubmit}
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+      >
+        Add Rule
+      </button>
+    </div>
+  );
+};
+
+const EditRuleForm = ({ rule, onSave, onCancel }) => {
+  const [editedRule, setEditedRule] = useState({ ...rule });
+
+  const handleChange = (field, value) => {
+    setEditedRule(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleConditionChange = (field, value) => {
+    setEditedRule(prev => ({
+      ...prev,
+      condition: {
+        ...prev.condition,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleActionChange = (field, value) => {
+    setEditedRule(prev => ({
+      ...prev,
+      action: {
+        ...prev.action,
+        [field]: value
+      }
+    }));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-sm font-semibold block">Name</label>
+        <input
+          className="w-full p-2 border rounded"
+          value={editedRule.name}
+          onChange={e => handleChange("name", e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Field</label>
+        <input
+          className="w-full p-2 border rounded"
+          value={editedRule.condition.field}
+          onChange={e => handleConditionChange("field", e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Operator</label>
+        <input
+          className="w-full p-2 border rounded"
+          value={editedRule.condition.operator}
+          onChange={e => handleConditionChange("operator", e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Value</label>
+        <input
+          className="w-full p-2 border rounded"
+          value={editedRule.condition.value}
+          onChange={e => handleConditionChange("value", e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="text-sm font-semibold block">Action Message</label>
+        <input
+          className="w-full p-2 border rounded"
+          value={editedRule.action.message}
+          onChange={e => handleActionChange("message", e.target.value)}
+        />
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => onSave(editedRule)} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          Save
+        </button>
+        <button onClick={onCancel} className="text-gray-600 hover:underline">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const sampleData = {
   orders,
@@ -185,64 +392,6 @@ const sampleData = {
   warehouses,
   carriers,
   inventory,
-  rules: [
-    {
-      name: "Block if Order Older Than 30 Days",
-      key: "blockIfOrderOlderThan30Days",
-      condition: {
-        field: "order_date",
-        operator: "older_than_days",
-        value: 30
-      },
-      action: {
-        type: "block_return",
-        message: "Return not allowed: Order is older than 30 days.",
-        icon: "⛔"
-      }
-    },
-    {
-      name: "Auto Refund for Loyalty Customers",
-      key: "loyaltyAutoRefund",
-      condition: {
-        field: "is_loyalty",
-        operator: "equals",
-        value: true
-      },
-      action: {
-        type: "auto_refund",
-        message: "Loyalty customer — instant refund issued",
-        icon: "💸"
-      }
-    },
-    {
-      name: "Route to Repairs if Damaged",
-      key: "routeIfDamaged",
-      condition: {
-        field: "testReason",
-        operator: "equals",
-        value: "damaged"
-      },
-      action: {
-        type: "route_to_repairs",
-        message: "Item routed to repairs DC",
-        icon: "🛠️"
-      }
-    },
-    {
-      name: "Route Based on Store Inventory",
-      key: "routeBasedOnStoreInventory",
-      condition: {
-        field: "inventory_quantity",
-        operator: "less_than",
-        value: 30
-      },
-      action: {
-        type: "route_to_store",
-        message: "Routed to store with low inventory",
-        icon: "🏬"
-      }
-    }
-  ],
   workflows: [
     {
       name: "Strict Return Policy",
@@ -271,7 +420,42 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [running, setRunning] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-
+  const [showJSONRule, setShowJSONRule] = useState(null);
+  const [editRule, setEditRule] = useState(null);
+  const [rules, setRules] = useState([
+    {
+      name: "Block if Order Older Than 30 Days",
+      key: "blockIfOrderOlderThan30Days",
+      priority: 1,
+      phase: "initiation",
+      condition: { field: "order_date", operator: "older_than_days", value: 30 },
+      action: { type: "block_return", message: "Return not allowed: Order is older than 30 days.", icon: "⛔" }
+    },
+    {
+      name: "Auto Refund for Loyalty Customers",
+      key: "loyaltyAutoRefund",
+      priority: 2,
+      phase: "initiation",
+      condition: { field: "is_loyalty", operator: "equals", value: true },
+      action: { type: "auto_refund", message: "Loyalty customer — instant refund issued", icon: "💸" }
+    },
+    {
+      name: "Route to Repairs if Damaged",
+      key: "routeIfDamaged",
+      priority: 3,
+      phase: "initiation",
+      condition: { field: "testReason", operator: "equals", value: "damaged" },
+      action: { type: "route_to_repairs", message: "Item routed to repairs DC", icon: "🛠️" }
+    },
+    {
+      name: "Route Based on Store Inventory",
+      key: "routeBasedOnStoreInventory",
+      priority: 4,
+      phase: "initiation",
+      condition: { field: "inventory_quantity", operator: "less_than", value: 30 },
+      action: { type: "route_to_store", message: "Routed to store with low inventory", icon: "🏬" }
+    }
+  ]);
   const toggleSection = (key) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -596,22 +780,40 @@ export default function App() {
                   {
                     label: "View List",
                     content: (
-                      <ul className="list-disc list-inside text-gray-700">
-                        {sampleData.rules.map((rule, i) => (
-                          <li key={i}>
-                            <strong>{rule.name}:</strong> {rule.action.message}
-                          </li>
+                      <div className="space-y-3">
+                        {rules.map((rule, i) => (
+                          <div key={i} className="flex justify-between items-center p-3 bg-white rounded shadow-sm">
+                            <span className="font-semibold">{rule.name}</span>
+                            <div className="space-x-3">
+                              <button
+                                onClick={() => setEditRule(rule)}
+                                className="text-blue-600 text-sm hover:underline"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => setShowJSONRule(rule)}
+                                className="text-gray-600 text-sm hover:underline"
+                              >
+                                View JSON
+                              </button>
+                            </div>
+                          </div>
                         ))}
-                      </ul>
-                    ),
+                      </div>
+                    )
                   },
                   {
                     label: "View JSON",
                     content: (
                       <pre className="bg-gray-100 p-4 rounded text-sm overflow-x-auto">
-                        {JSON.stringify(sampleData.rules, null, 2)}
+                        {JSON.stringify(rules, null, 2)}
                       </pre>
                     ),
+                  },
+                  {
+                    label: "Add Rule",
+                    content: <RuleForm onAdd={(newRule) => setRules([...rules, newRule])} schemas={schemas} />
                   }
                 ]}
               />
@@ -626,18 +828,32 @@ export default function App() {
                   {
                     label: "View List",
                     content: (
-                      <div>
-                        {sampleData.workflows.map((workflow, i) => (
-                          <div key={i} className="mb-4">
-                            <p className="font-semibold">{workflow.name}</p>
-                            <ul className="list-disc list-inside ml-2">
-                              {workflow.ruleKeys.map((ruleKey, idx) => (
-                                <li key={idx} className="text-sm">{ruleKey}</li>
-                              ))}
-                            </ul>
+                      {
+                        label: "View List",
+                        content: (
+                          <div className="space-y-3">
+                            {rules.map((rule, i) => (
+                              <div key={i} className="flex justify-between items-center p-3 bg-white rounded shadow-sm">
+                                <span className="font-semibold">{rule.name}</span>
+                                <div className="space-x-3">
+                                  <button
+                                    onClick={() => setEditRule(rule)}
+                                    className="text-blue-600 text-sm hover:underline"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => setShowJSONRule(rule)}
+                                    className="text-gray-600 text-sm hover:underline"
+                                  >
+                                    View JSON
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        )
+                      }
                     ),
                   },
                   {
@@ -786,6 +1002,177 @@ export default function App() {
       })()}
     </div>
 </div>
+{showJSONRule && (
+  <Modal
+    title={`JSON: ${showJSONRule.name}`}
+    content={
+      <pre className="text-sm overflow-x-auto whitespace-pre-wrap">
+        {JSON.stringify(showJSONRule, null, 2)}
+      </pre>
+    }
+    onClose={() => setShowJSONRule(null)}
+  />
+)}
+{editRule && (
+  <Modal
+    title={`Edit Rule: ${editRule.name}`}
+    content={(
+      <div className="space-y-3">
+        <div>
+          <label className="text-sm font-semibold block">Rule Name</label>
+          <input
+            className="w-full p-2 border rounded"
+            value={editRule.name}
+            onChange={(e) => setEditRule({ ...editRule, name: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Entity</label>
+          <select
+            className="w-full p-2 border rounded"
+            value={editRule.condition.entity}
+            onChange={(e) =>
+              setEditRule({
+                ...editRule,
+                condition: { ...editRule.condition, entity: e.target.value },
+              })
+            }
+          >
+            {Object.keys(schemas).map((key) => (
+              <option key={key} value={key}>{key}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Field</label>
+          <select
+            className="w-full p-2 border rounded"
+            value={editRule.condition.field}
+            onChange={(e) =>
+              setEditRule({
+                ...editRule,
+                condition: { ...editRule.condition, field: e.target.value },
+              })
+            }
+          >
+            <option value="">Select field</option>
+            {(schemas[editRule.condition.entity] || []).map((f, i) => (
+              <option key={i} value={f}>{f}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Operator</label>
+          <select
+            className="w-full p-2 border rounded"
+            value={editRule.condition.operator}
+            onChange={(e) =>
+              setEditRule({
+                ...editRule,
+                condition: { ...editRule.condition, operator: e.target.value },
+              })
+            }
+          >
+            <option value="">Select operator</option>
+            <option value="equals">equals</option>
+            <option value="less_than">less_than</option>
+            <option value="greater_than">greater_than</option>
+            <option value="older_than_days">older_than_days</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Value</label>
+          <input
+            className="w-full p-2 border rounded"
+            value={editRule.condition.value}
+            onChange={(e) =>
+              setEditRule({
+                ...editRule,
+                condition: {
+                  ...editRule.condition,
+                  value: isNaN(e.target.value) ? e.target.value : Number(e.target.value),
+                },
+              })
+            }
+          />
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Priority</label>
+          <input
+            type="number"
+            className="w-full p-2 border rounded"
+            value={editRule.priority || 1}
+            onChange={(e) =>
+              setEditRule({ ...editRule, priority: Number(e.target.value) })
+            }
+          />
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Phase</label>
+          <select
+            className="w-full p-2 border rounded"
+            value={editRule.phase || "initiation"}
+            onChange={(e) => setEditRule({ ...editRule, phase: e.target.value })}
+          >
+            <option value="initiation">Initiation</option>
+            <option value="post_dropoff">Post-Dropoff</option>
+            <option value="processing">Processing</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Action Type</label>
+          <select
+            className="w-full p-2 border rounded"
+            value={editRule.action.type}
+            onChange={(e) =>
+              setEditRule({
+                ...editRule,
+                action: {
+                  ...editRule.action,
+                  type: e.target.value,
+                  message: actions[e.target.value]?.description || "",
+                  icon: actions[e.target.value]?.icon || "🔧",
+                },
+              })
+            }
+          >
+            <option value="">Select action</option>
+            {Object.entries(actions).map(([key, val]) => (
+              <option key={key} value={key}>
+                {val.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-sm font-semibold block">Message</label>
+          <input
+            className="w-full p-2 border rounded"
+            value={editRule.action.message}
+            onChange={(e) =>
+              setEditRule({
+                ...editRule,
+                action: { ...editRule.action, message: e.target.value },
+              })
+            }
+          />
+        </div>
+        <button
+          onClick={() => {
+            setRules((prev) =>
+              prev.map((r) => (r.key === editRule.key ? editRule : r))
+            );
+            setEditRule(null);
+          }}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Save
+        </button>
+      </div>
+    )}
+    onClose={() => setEditRule(null)}
+  />
+)}
     </div>
   );
 }
