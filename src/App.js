@@ -1,400 +1,19 @@
 import React, { useState } from "react";
-import orders from './data/orders';
-import skus from './data/skus';
-import stores from './data/stores';
-import warehouses from './data/warehouses';
-import inventory from './data/inventory';
-import carriers from './data/carriers';
+import { orders, skus, stores, warehouses, inventory, carriers, schemas } from './data';
+import Modal from './components/Modal';
+import TabView from './components/TabView';
+import HeroHeader from './components/HeroHeader';
+import CostSavingsGraph from './components/CostSavingsGraph';
+import CostSavingsChart from './components/CostSavingsChart';
+import { defaultRules } from './rules/defaultRules';
 import ConfigBox from './configBox';
-import logo from "./by-logo.png";
-import { schemas } from './data/schemas';
-import { actions } from './data/actions';
-
-const Modal = ({ title, content, onClose }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-    <div className="bg-white p-6 rounded-lg shadow-lg max-w-xl w-full">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold">{title}</h3>
-        <button onClick={onClose} className="text-gray-500 hover:text-black">&times;</button>
-      </div>
-      <div>{content}</div>
-    </div>
-  </div>
-);
-
-const applyRules = (order, rules, warehouses, initialDropOffStore) => {
-  let dropOffStore = initialDropOffStore;
-  const steps = [];
-  let blocked = false;
-  let refundStepExists = false;
-  let routedToDC = false;
-  let routedToRepairsDC = false;
-  let repairsDC = null;
-
-  for (const rule of rules) {
-    const match = evaluateCondition(rule.condition, order, dropOffStore);
-    if (!match) continue;
-    // Skip other routing if already routed to repairs
-    if (routedToRepairsDC && ["route_to_store", "route_to_dc"].includes(rule.action.type)) {
-      continue;
-    }
-
-    if (rule.action.type !== "route_to_store") {
-      steps.push({
-        label: "Rule Triggered",
-        icon: rule.action.icon,
-        detail: rule.action.message
-      });
-    }
-    if (rule.action.type === "block_return") {
-      blocked = true;
-      break; // Stop evaluating further rules
-    }
-
-    switch (rule.action.type) {
-      // Removed block_return case as it is handled above
-      case "auto_refund":
-        refundStepExists = true;
-        break;
-      case "route_to_repairs":
-        routedToRepairsDC = true;
-        repairsDC = warehouses.find(wh =>
-          wh.warehouse_name.toLowerCase().includes("repair")
-        ) || warehouses[0];
-        break;
-      case "route_to_store": {
-        const currentQty = getInventoryQty(order.items[0].sku, dropOffStore.store_id);
-        const fallback = findFallbackStore(order.items[0].sku);
-        
-        // Always trigger a rule response
-        if (currentQty < rule.condition.value) {
-          if (fallback && fallback.store_id !== dropOffStore.store_id) {
-            steps.push({
-              label: "Rule Triggered",
-              icon: rule.action.icon,
-              detail: `${rule.action.message}: ${fallback.store_name}`
-            });
-            dropOffStore = fallback;
-          } else {
-            steps.push({
-              label: "Rule Triggered",
-              icon: "🏢",
-              detail: `No store with low inventory found — routing to DC`
-            });
-            routedToDC = true;
-          }
-        } else {
-          steps.push({
-            label: "Rule Triggered",
-            icon: "🏢",
-            detail: `Store inventory is sufficient — routing to DC`
-          });
-          routedToDC = true;
-        }
- 
-        break;
-      }
-      case "route_to_dc":
-        routedToDC = true;
-        break;
-    }
-
-    
-  }
-
-  return { steps, blocked, refundStepExists, routedToDC, routedToRepairsDC, repairsDC, dropOffStore };
-};
-
-const evaluateCondition = (condition, order, dropOffStore) => {
-  if (!condition) return false;
-  const { field, operator, value } = condition;
-
-  let actualValue;
-
-  if (field === "inventory_quantity") {
-    actualValue = getInventoryQty(order.items[0].sku, dropOffStore?.store_id);
-  } else {
-    actualValue = order[field];
-  }
-
-  switch (operator) {
-    case "equals":
-      return actualValue === value;
-    case "older_than_days":
-      const orderDate = new Date(order.order_date.split("-").reverse().join("-"));
-      const today = new Date();
-      const diffInDays = (today - orderDate) / (1000 * 3600 * 24);
-      return diffInDays > value;
-    case "less_than":
-      return actualValue < value;
-    default:
-      return false;
-  }
-};
-
-const getInventoryQty = (sku, storeId) => {
-  const match = inventory.find(inv => inv.sku === sku && inv.location_id === storeId);
-  return match ? match.quantity : 0;
-};
-
-const findFallbackStore = (sku) => {
-  return stores.find((store) => {
-    const inv = inventory.find(
-      (inv) => inv.sku === sku && inv.location_type === "store" && inv.location_id === store.store_id
-    );
-    return inv && inv.quantity < 30;
-  });
-};
-
-export const HeroHeader = () => (
-  <div className="w-full bg-white shadow px-6 py-8 mb-10 relative">
-    {/* Blue Yonder Logo - Aligned Left */}
-    <div className="absolute left-6 top-1/2 -translate-y-1/2">
-      <img src={logo} alt="Blue Yonder Logo" className="h-10 md:h-12" />
-    </div>
-
-    {/* Centered Title + Subtitle */}
-    <div className="text-center">
-      <h1 className="text-4xl md:text-5xl font-extrabold text-blue-800 tracking-tight mb-1">
-        Returns Simulation App
-      </h1>
-      <p className="text-gray-600 text-base md:text-lg">
-        Design and simulate intelligent return flows
-      </p>
-    </div>
-  </div>
-);
-
-const TabView = ({ tabs }) => {
-  const [activeTab, setActiveTab] = useState(0);
-
-  return (
-    <div>
-      <div className="flex mb-3 space-x-2">
-        {tabs.map((tab, i) => (
-          <button
-            key={i}
-            onClick={() => setActiveTab(i)}
-            className={`px-3 py-1 text-sm rounded ${
-              i === activeTab
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <div>{tabs[activeTab].content}</div>
-    </div>
-  );
-};
-const RuleForm = ({ onAdd, schemas }) => {
-  const [name, setName] = useState("");
-  const [entity, setEntity] = useState("order");
-  const [field, setField] = useState("");
-  const [operator, setOperator] = useState("");
-  const [value, setValue] = useState("");
-  const [actionType, setActionType] = useState("");
-  const [priority, setPriority] = useState(1);
-  const [phase, setPhase] = useState("initiation");
-  const [message, setMessage] = useState("");
-
-  const handleSubmit = () => {
-    if (!entity || !field || !operator || value === "" || !actionType || !message) return;
-
-    const newRule = {
-      name: name || `Custom Rule (${entity}.${field})`,
-      key: `custom_${Date.now()}`,
-      condition: {
-        entity,
-        field,
-        operator,
-        value: isNaN(value) ? value : Number(value),
-      },
-      phase,
-      priority,
-      action: {
-        type: actionType,
-        message,
-        icon: actions[actionType]?.icon || "🔧",
-      }
-    };
-
-    onAdd(newRule);
-    setName("Name"); setEntity("order"); setField(""); setOperator(""); setValue(""); setActionType(""); setMessage("");
-  };
-
-  return (
-    <div className="space-y-3">
-      <div>
-  <label className="text-sm font-semibold block">Name</label>
-  <input
-    className="w-full p-2 border rounded"
-    value={name}
-    onChange={(e) => setName(e.target.value)}
-    placeholder="e.g. Require Manual Approval"
-/>
-</div>
-      <div>
-        <label className="text-sm font-semibold block">Entity</label>
-        <select className="w-full p-2 border rounded" value={entity} onChange={(e) => { setEntity(e.target.value); setField(""); }}>
-          {Object.keys(schemas).map((key) => (
-            <option key={key} value={key}>{key}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Field</label>
-        <select className="w-full p-2 border rounded" value={field} onChange={(e) => setField(e.target.value)}>
-          <option value="">Select field</option>
-          {(schemas[entity] || []).map((f, i) => (
-            <option key={i} value={f}>{f}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Operator</label>
-        <select className="w-full p-2 border rounded" value={operator} onChange={(e) => setOperator(e.target.value)}>
-          <option value="">Select operator</option>
-          <option value="equals">equals</option>
-          <option value="less_than">less_than</option>
-          <option value="greater_than">greater_than</option>
-          <option value="older_than_days">older_than_days</option>
-        </select>
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Value</label>
-        <input className="w-full p-2 border rounded" value={value} onChange={(e) => setValue(e.target.value)} />
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Action Type</label>
-        <select
-          className="w-full p-2 border rounded"
-          value={actionType}
-          onChange={(e) => {
-            setActionType(e.target.value);
-            if (actions[e.target.value]) {
-              setMessage(actions[e.target.value].description);
-            }
-          }}
-        >
-          <option value="">Select action</option>
-          {Object.entries(actions).map(([key, val]) => (
-            <option key={key} value={key}>{val.label}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Message</label>
-        <input className="w-full p-2 border rounded" value={message} onChange={(e) => setMessage(e.target.value)} />
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Priority</label>
-        <input type="number" className="w-full p-2 border rounded" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Phase</label>
-        <select className="w-full p-2 border rounded" value={phase} onChange={(e) => setPhase(e.target.value)}>
-          <option value="initiation">Initiation</option>
-          <option value="post_dropoff">Post-Dropoff</option>
-          <option value="processing">Processing</option>
-        </select>
-      </div>
-      <button
-        onClick={handleSubmit}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-      >
-        Add Rule
-      </button>
-    </div>
-  );
-};
-
-const EditRuleForm = ({ rule, onSave, onCancel }) => {
-  const [editedRule, setEditedRule] = useState({ ...rule });
-
-  const handleChange = (field, value) => {
-    setEditedRule(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-
-  const handleConditionChange = (field, value) => {
-    setEditedRule(prev => ({
-      ...prev,
-      condition: {
-        ...prev.condition,
-        [field]: value
-      }
-    }));
-  };
-
-  const handleActionChange = (field, value) => {
-    setEditedRule(prev => ({
-      ...prev,
-      action: {
-        ...prev.action,
-        [field]: value
-      }
-    }));
-  };
-
-  return (
-    <div className="space-y-3">
-      <div>
-        <label className="text-sm font-semibold block">Name</label>
-        <input
-          className="w-full p-2 border rounded"
-          value={editedRule.name}
-          onChange={e => handleChange("name", e.target.value)}
-        />
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Field</label>
-        <input
-          className="w-full p-2 border rounded"
-          value={editedRule.condition.field}
-          onChange={e => handleConditionChange("field", e.target.value)}
-        />
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Operator</label>
-        <input
-          className="w-full p-2 border rounded"
-          value={editedRule.condition.operator}
-          onChange={e => handleConditionChange("operator", e.target.value)}
-        />
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Value</label>
-        <input
-          className="w-full p-2 border rounded"
-          value={editedRule.condition.value}
-          onChange={e => handleConditionChange("value", e.target.value)}
-        />
-      </div>
-      <div>
-        <label className="text-sm font-semibold block">Action Message</label>
-        <input
-          className="w-full p-2 border rounded"
-          value={editedRule.action.message}
-          onChange={e => handleActionChange("message", e.target.value)}
-        />
-      </div>
-      <div className="flex gap-2">
-        <button onClick={() => onSave(editedRule)} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Save
-        </button>
-        <button onClick={onCancel} className="text-gray-600 hover:underline">
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-};
+import { actions } from './components/actions';
+import { runSimulation } from './engine/simulationEngine';
+import RuleForm from './components/ruleForm';
+import ReturnSummary from './components/returnSummary';
+import RulePriority from './components/rulePriority';
+import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 
 const sampleData = {
   orders,
@@ -403,24 +22,7 @@ const sampleData = {
   warehouses,
   carriers,
   inventory,
-  workflows: [
-    {
-      name: "Strict Return Policy",
-      ruleKeys: ["blockIfOrderOlderThan30Days"]
-    },
-    {
-      name: "Damage Routing",
-      ruleKeys: ["routeIfDamaged"]
-    },
-    {
-      name: "Routing Workflow",
-      ruleKeys: ["routeBasedOnStoreInventory"]
-    },
-    {
-      name: "Loyalty Auto Refund",
-      ruleKeys: ["loyaltyAutoRefund"]
-    }
-  ]
+
 };
 
 export default function App() {
@@ -433,139 +35,55 @@ export default function App() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [showJSONRule, setShowJSONRule] = useState(null);
   const [editRule, setEditRule] = useState(null);
-  const [rules, setRules] = useState([
-    {
-      name: "Block if Order Older Than 30 Days",
-      key: "blockIfOrderOlderThan30Days",
-      priority: 1,
-      phase: "initiation",
-      condition: { field: "order_date", operator: "older_than_days", value: 30 },
-      action: { type: "block_return", message: "Return not allowed: Order is older than 30 days.", icon: "⛔" }
-    },
-    {
-      name: "Auto Refund for Loyalty Customers",
-      key: "loyaltyAutoRefund",
-      priority: 2,
-      phase: "initiation",
-      condition: { field: "is_loyalty", operator: "equals", value: true },
-      action: { type: "auto_refund", message: "Loyalty customer — instant refund issued", icon: "💸" }
-    },
-    {
-      name: "Route to Repairs if Damaged",
-      key: "routeIfDamaged",
-      priority: 3,
-      phase: "initiation",
-      condition: { field: "testReason", operator: "equals", value: "damaged" },
-      action: { type: "route_to_repairs", message: "Item routed to repairs DC", icon: "🛠️" }
-    },
-    {
-      name: "Route Based on Store Inventory",
-      key: "routeBasedOnStoreInventory",
-      priority: 4,
-      phase: "initiation",
-      condition: { field: "inventory_quantity", operator: "less_than", value: 30 },
-      action: { type: "route_to_store", message: "Routed to store with low inventory", icon: "🏬" }
+  const [returns, setReturns] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const [selectedReturn, setSelectedReturn] = useState(null);
+  const [rules, setRules] = useState(() => {
+    const stored = localStorage.getItem("rules");
+    return stored ? JSON.parse(stored) : defaultRules;
+  });
+  const [showReturnsList, setShowReturnsList] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  useLayoutEffect(() => {
+    // Check if user is already at or near the bottom (within 100px)
+    const threshold = 100;
+    const { innerHeight, pageYOffset } = window;
+    const scrollBottom = document.body.scrollHeight - (innerHeight + pageYOffset);
+    if (scrollBottom < threshold) {
+      // scroll to the very bottom without animation (or you can use smooth)
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     }
-  ]);
-  const toggleSection = (key) => {
-    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, [returns, history]);
+
+  const clearAllData = () => {
+    // Resets simulator, governance, and value data
+    setSelectedOrders([]);
+    setActiveSteps([]);
+    setHistory([]);
+    setReturns([]);
+    setCurrentStepIndex(0);
+    setRunning(false);
   };
+
+  const handleSelectAllOrders = () => {
+    if (selectedOrders.length === sampleData.orders.length) {
+      // If all orders are already selected, clear selection
+      setSelectedOrders([]);
+    } else {
+      // Otherwise, select all orders
+      setSelectedOrders(sampleData.orders.map(order => order.order_id));
+    }
+  };
+
+  useEffect(() => {
+    localStorage.setItem("rules", JSON.stringify(rules));
+  }, [rules]);
 
   const handleOrderCheckboxChange = (orderId) => {
     setSelectedOrders((prev) =>
       prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
     );
-  };
-
-  const runSimulation = async () => {
-    for (let orderId of selectedOrders) {
-      const order = sampleData.orders.find(o => o.order_id === orderId);
-      const carrier = sampleData.carriers.length > 0 ? sampleData.carriers[0] : { name: "Default Carrier" };
-      const item = order.items[0];
-      const initialDropOffStore = sampleData.stores[0];
-  
-      order.testReason = order.testReason ?? "other";
-  
-      const steps = [
-        {
-          label: "Return Initiated",
-          icon: "🧾",
-          detail: `Order ID: ${order.order_id}\nCustomer: ${order.customer_name}\nItem: ${item.name}\nReason: ${order.testReason}`
-        }
-      ];
-  
-      const ruleKeys = [...new Set(sampleData.workflows.flatMap(wf => wf.ruleKeys))];
-      const activeRules = sampleData.rules.filter(rule => ruleKeys.includes(rule.key));
-  
-      const result = applyRules(order, activeRules, sampleData.warehouses, initialDropOffStore);
-      steps.push(...result.steps);
-      
-      // Only apply fallback routing if not blocked and no store reroute has occurred
-      if (
-        !result.blocked &&
-        !result.routedToRepairsDC &&
-        !result.routedToDC &&
-        result.dropOffStore?.store_id === initialDropOffStore.store_id
-      ) {
-        result.routedToDC = true;
-        steps.push({
-          label: "Rule Triggered",
-          icon: "🏢",
-          detail: "Default routing applied — item routed to DC"
-        });
-      }
-  
-      if (!result.blocked) {
-        steps.push({
-          label: "Drop-Off at Store",
-          icon: "📦",
-          detail: `Store: ${result.dropOffStore.store_name}\nAddress: ${result.dropOffStore.location}`
-        });
-  
-        if (result.routedToRepairsDC && result.repairsDC) {
-          steps.push({
-            label: "Transportation",
-            icon: "🚚",
-            detail: `Item sent to Repairs DC: ${result.repairsDC.warehouse_name} via ${carrier.carrier_name}`
-          });
-  
-          steps.push({
-            label: "Return Processed",
-            icon: "🔍",
-            detail: "Damaged item inspected and queued for repair"
-          });
-        } else if (result.routedToDC) {
-          steps.push({
-            label: "Transportation",
-            icon: "🚚",
-            detail: `Item is being transported to the DC via ${carrier.carrier_name}`
-          });
-  
-          steps.push({
-            label: "Return Processed",
-            icon: "🔍",
-            detail: "Item has been received and processed at the DC"
-          });
-        }
-  
-        // Refund is always shown last unless it already happened
-        if (!result.refundStepExists) {
-          steps.push({
-            label: "Refund Issued",
-            icon: "💸",
-            detail: `Refund for ${item.name} ($${item.unit_price})`
-          });
-        }
-      }
-  
-      for (let i = 0; i < steps.length; i++) {
-        setCurrentStepIndex(i + 1);
-        setActiveSteps(prev => [...prev.slice(0, i), steps[i]]);
-        await new Promise(res => setTimeout(res, 600));
-      }
-  
-      setHistory(prev => [...prev, steps]);
-    }
   };
   
   const getSimulationInsights = () => {
@@ -597,6 +115,7 @@ export default function App() {
     return summary;
   };
   
+  const totalExpectedSteps = selectedOrders.length ? selectedOrders.length * 6 : 1; // Avoid dividing by zero.
   return (
     <div className="min-h-screen w-screen overflow-x-hidden bg-gray-100 p-6 font-sans">
 
@@ -782,93 +301,87 @@ export default function App() {
               </div>
             )
           },
+{
+  key: "rules-box",
+  title: "⚙️ Rules",
+  content: (
+    <TabView
+      tabs={[
+        {
+          label: "View List",
+          content: (
+            <div className="space-y-3">
+              {rules.map((rule, i) => (
+                <div key={i} className="flex justify-between items-center p-3 bg-white rounded shadow-sm">
+                  <span className="font-semibold">{rule.name}</span>
+                  <div className="space-x-3">
+                    <button
+                      onClick={() => setEditRule(rule)}
+                      className="text-blue-600 text-sm hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setShowJSONRule(rule)}
+                      className="text-green-600 text-sm hover:underline"
+                    >
+                      View JSON
+                    </button>
+                    <button
+                      onClick={() => setRules(rules.filter(r => r.key !== rule.key))}
+                      className="text-red-600 text-sm hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {rules.length > 0 && (
+                <button
+                  onClick={() => setRules(defaultRules)}
+                  className="text-sm text-red-600 hover:underline mt-2"
+                >
+                  Reset to Default Rules
+                </button>
+              )}
+            </div>
+          )
+        },
+        {
+          label: "Add Rule",
+          content: (
+            <RuleForm
+              onAdd={(newRule) => {
+                setRules([...rules, newRule]);
+                setActiveTab(0); 
+              }}
+              schemas={schemas}
+              rules={rules}
+            />
+          )
+        },
+        {
+          label: "Rule Priority",
+          content: <RulePriority rules={rules} setRules={setRules} />
+        }
+      ]}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+    />
+  )
+},
           {
-            key: "rules-box",
-            title: "⚙️ Rules",
+            key: "financial-box",
+            title: "💰 Cost Model",
             content: (
-              <TabView
-                tabs={[
-                  {
-                    label: "View List",
-                    content: (
-                      <div className="space-y-3">
-                        {rules.map((rule, i) => (
-                          <div key={i} className="flex justify-between items-center p-3 bg-white rounded shadow-sm">
-                            <span className="font-semibold">{rule.name}</span>
-                            <div className="space-x-3">
-                              <button
-                                onClick={() => setEditRule(rule)}
-                                className="text-blue-600 text-sm hover:underline"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => setShowJSONRule(rule)}
-                                className="text-gray-600 text-sm hover:underline"
-                              >
-                                View JSON
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  },
-                  {
-                    label: "Add Rule",
-                    content: <RuleForm onAdd={(newRule) => setRules([...rules, newRule])} schemas={schemas} />
-                  }
-                ]}
-              />
-            )
-          },
-          {
-            key: "workflows-box",
-            title: "🔄 Workflows",
-            content: (
-              <TabView
-                tabs={[
-                  {
-                    label: "View List",
-                    content: (
-                      {
-                        label: "View List",
-                        content: (
-                          <div className="space-y-3">
-                            {rules.map((rule, i) => (
-                              <div key={i} className="flex justify-between items-center p-3 bg-white rounded shadow-sm">
-                                <span className="font-semibold">{rule.name}</span>
-                                <div className="space-x-3">
-                                  <button
-                                    onClick={() => setEditRule(rule)}
-                                    className="text-blue-600 text-sm hover:underline"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => setShowJSONRule(rule)}
-                                    className="text-gray-600 text-sm hover:underline"
-                                  >
-                                    View JSON
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      }
-                    ),
-                  },
-                  {
-                    label: "View JSON",
-                    content: (
-                      <pre className="bg-gray-100 p-4 rounded text-sm overflow-x-auto">
-                        {JSON.stringify(sampleData.workflows, null, 2)}
-                      </pre>
-                    ),
-                  }
-                ]}
-              />
+              <div className="text-sm text-gray-700">
+                <p>
+                  This section will allow users to configure key financial inputs such as cost per return,
+                  refund values, and processing fees. These values will be used to calculate business value
+                  and return savings in the simulator insights.
+                </p>
+                <p className="mt-2 italic text-gray-500">Coming soon: Add financial configuration to power ROI calculations.</p>
+              </div>
             )
           }
         ].map(({ key, title, content }) => (
@@ -885,32 +398,40 @@ export default function App() {
 </div>      <div className="w-full max-w-[1600px] mx-auto px-6 mb-8">
         <label className="block font-medium mb-2">Select Order(s):</label>
         <div className="relative">
-          <button
-            onClick={() => setDropdownOpen((prev) => !prev)}
-            className="bg-white p-3 w-full rounded-xl shadow border text-left"
-          >
-            {selectedOrders.length > 0
-              ? `${selectedOrders.length} order(s) selected`
-              : "Select Orders"}
-          </button>
-          {dropdownOpen && (
-            <div className="absolute z-10 bg-white mt-2 w-full max-h-64 overflow-y-auto shadow-lg rounded-xl border">
-              {sampleData.orders.map((order) => (
-                <label
-                  key={order.order_id}
-                  className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedOrders.includes(order.order_id)}
-                    onChange={() => handleOrderCheckboxChange(order.order_id)}
-                  />
-                  <span>{order.order_id}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
+  <button
+    onClick={() => setDropdownOpen((prev) => !prev)}
+    className="bg-white p-3 w-full rounded-xl shadow border text-left"
+  >
+    {selectedOrders.length > 0
+      ? `${selectedOrders.length} order(s) selected`
+      : "Select Orders"}
+  </button>
+  {dropdownOpen && (
+    <div className="absolute z-10 bg-white mt-2 w-full max-h-64 overflow-y-auto shadow-lg rounded-xl border">
+      {/* "Select All" button */}
+      <button
+        onClick={handleSelectAllOrders}
+        className="w-full text-left px-4 py-2 bg-blue-100 hover:bg-blue-200"
+      >
+        Select All
+      </button>
+      {/* Orders list */}
+      {sampleData.orders.map((order) => (
+        <label
+          key={order.order_id}
+          className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer"
+        >
+          <input
+            type="checkbox"
+            checked={selectedOrders.includes(order.order_id)}
+            onChange={() => handleOrderCheckboxChange(order.order_id)}
+          />
+          <span>{order.order_id}</span>
+        </label>
+      ))}
+    </div>
+  )}
+</div>
       </div>
 
       <div className="w-full max-w-[1600px] mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
@@ -918,12 +439,23 @@ export default function App() {
     <div className="flex items-center justify-between mb-4">
       <h2 className="text-xl font-bold">🚀 Active Simulation</h2>
       <button
-        onClick={runSimulation}
-        disabled={running || selectedOrders.length === 0}
-        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
-      >
-        {running ? "Running..." : "Simulate Return"}
-      </button>
+  onClick={() =>
+    runSimulation(
+      selectedOrders,
+      rules,
+      sampleData,
+      setRunning,
+      setActiveSteps,
+      setCurrentStepIndex,
+      setReturns,
+      setHistory
+    )
+  }
+  disabled={running || selectedOrders.length === 0}
+  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+>
+  {running ? "Running..." : "Simulate Return"}
+</button>
     </div>
     <div className="space-y-4">
       {activeSteps.map((step, idx) => (
@@ -936,8 +468,7 @@ export default function App() {
         <div className="w-full bg-gray-200 h-2 rounded overflow-hidden">
           <div
             className="bg-green-500 h-full transition-all"
-            style={{ width: `${(currentStepIndex / 6) * 100}%` }}
-          ></div>
+            style={{ width: `${(currentStepIndex / (selectedOrders.length * 6)) * 100}%` }}          ></div>
         </div>
       )}
     </div>
@@ -967,44 +498,182 @@ export default function App() {
   </div>
 </div>
 
-    {/* Value & Governance Section */}
-    <div className="flex items-center gap-3 mb-6 mt-12">
+{/* Governance Section */}
+<div className="flex items-center gap-3 mb-6 mt-12">
   <div className="h-10 w-2 bg-blue-600 rounded"></div>
   <h2 className="text-3xl font-semibold text-gray-800 tracking-wide">
-    Value
+    Governance
   </h2>
 </div>
+
 <div className="w-full max-w-[1600px] mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-    <div className="bg-white rounded-xl shadow p-6">
-      <h3 className="text-xl font-semibold mb-2">📈 Business Value</h3>
-      {(() => {
-        const s = getSimulationInsights();
-        return (
-          <ul className="text-gray-700 text-sm list-disc list-inside">
-            <li>{s.totalReturns} returns simulated</li>
-            <li>{s.autoRefunds} auto-refunded for loyalty customers</li>
-            <li>{s.routedToStore} routed to stores with low inventory</li>
-            <li>{s.routedToRepairs} sent to repairs DCs</li>
-            <li>{s.blockedReturns} returns blocked due to policy</li>
-            <li>{s.ruleTriggers} total rule triggers across all returns</li>
-          </ul>
-        );
-      })()}
-    </div>
-    <div className="bg-white rounded-xl shadow p-6">
-      <h3 className="text-xl font-semibold mb-2">🛡️ Governance</h3>
-      {(() => {
-        const s = getSimulationInsights();
-        return (
-          <ul className="text-gray-700 text-sm list-disc list-inside">
-            <li>{s.ruleTriggers} rules enforced consistently</li>
-            <li>Governance ensured routing to stores, DCs, or repairs based on 4 rule types</li>
-            <li>Blocked {s.blockedReturns} ineligible returns to avoid unnecessary costs</li>
-          </ul>
-        );
-      })()}
-    </div>
+  {/* Left: List of Returns */}
+<div className="bg-white rounded-xl shadow p-6">
+  <h3 className="text-xl font-semibold mb-3">📦 Returns Created</h3>
+  <button
+    onClick={() => setShowReturnsList(prev => !prev)}
+    className="bg-blue-600 text-white px-3 py-1 rounded mb-3"
+  >
+    {showReturnsList ? "Hide Returns Created" : "Show Returns Created"}
+  </button>
+  {showReturnsList && (
+    returns.length === 0 ? (
+      <p className="text-gray-500">No returns have been created yet.</p>
+    ) : (
+      <ul className="space-y-3">
+        {returns.map((ret, i) => (
+          <li
+            key={i}
+            onClick={() => {
+              setSelectedReturn(ret);
+              setShowReturnModal(true);
+            }}
+            className={`cursor-pointer p-3 rounded border ${selectedReturn?.orderId === ret.orderId ? "bg-blue-100 border-blue-500" : "hover:bg-gray-100"}`}
+          >
+            <p className="font-semibold text-sm">Order #{ret.orderId} - {ret.customer}</p>
+            <p className="text-sm text-gray-600">
+              {ret.blocked
+                ? "❌ Blocked"
+                : ret.pendingApproval
+                ? "⏳ Pending Approval"
+                : "✅ Completed"}
+            </p>
+            <p className="text-xs text-gray-500">
+              {ret.steps.length} steps · {ret.rulesTriggered?.length || 0} rules applied
+            </p>
+          </li>
+        ))}
+      </ul>
+    )
+  )}
 </div>
+
+ {/* Right: Aggregated Governance Summary */}
+<div className="bg-white rounded-xl shadow p-6">
+<h3 className="text-xl font-semibold mb-2">
+  <span role="img" aria-label="shield" className="mr-2">🛡️</span>
+  Performance Summary
+</h3>  
+  {/* Static Governance ensured text */}
+  <div className="mb-4">
+    <p className="font-semibold">Governance Ensured:</p>
+    <ul className="list-disc list-inside text-gray-700 text-sm">
+      <li>Preferred routing to stores, DCs, or repairs centres</li>
+      <li>Returns of high value require manual approval</li>
+      <li>Loyalty customers are refunded instantly</li>
+    </ul>
+  </div>
+  
+  {/* Dynamic list of Triggered Rule Types as bullet points */}
+  <div className="mb-4">
+    <p className="font-semibold">Triggered Rule Types:</p>
+    <ul className="list-disc list-inside text-gray-700 text-sm">
+      {(() => {
+          // Get an array of all triggered rule names from all returns.
+          const triggeredRulesAll = returns.flatMap(ret => ret.rulesTriggered || []);
+          // Build a frequency object: key = rule name, value = count
+          const ruleFrequency = triggeredRulesAll.reduce((acc, ruleName) => {
+            acc[ruleName] = (acc[ruleName] || 0) + 1;
+            return acc;
+          }, {});
+          // Map the frequency object to an array of <li> items:
+          const ruleTypes = Object.entries(ruleFrequency).map(
+            ([rule, count]) => <li key={rule}>{rule} ({count})</li>
+          );
+          return ruleTypes.length > 0 ? ruleTypes : <li>None</li>;
+      })()}
+    </ul>
+  </div>
+  
+  {/* Aggregated Summary */}
+  <div>
+    <p className="font-semibold">Summary:</p>
+    <ul className="list-disc list-inside text-gray-700 text-sm">
+      <li>Total Returns: {returns.length}</li>
+      <li>
+        Total Steps: {returns.reduce((acc, ret) => acc + (ret.steps?.length || 0), 0)}
+      </li>
+      <li>
+        Total Rules Triggered: {returns.reduce((acc, ret) => acc + (ret.rulesTriggered?.length || 0), 0)}
+      </li>
+    </ul>
+  </div>
+</div>
+</div>
+{showReturnModal && selectedReturn && (
+  <Modal
+    title={`Return Details - Order #${selectedReturn.orderId}`}
+    content={<ReturnSummary returnData={selectedReturn} />}
+    onClose={() => setShowReturnModal(false)}
+  />
+)}
+
+{/* Value Section */}
+<div className="flex items-center gap-3 mb-6 mt-12">
+  <div className="h-10 w-2 bg-blue-600 rounded"></div>
+  <h2 className="text-3xl font-semibold text-gray-800 tracking-wide">Value</h2>
+</div>
+
+<div className="w-full max-w-[1600px] mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+  {/* Left Column: Progress Bar and Graph */}
+  <div className="bg-white rounded-xl shadow p-6">
+    <div>
+      <p className="text-gray-700 mb-2">
+        {returns.length === 0 ? "Run the simulator to estimate cost savings.." : running ? "Returns are being created..." : "Returns complete"}
+      </p>
+      <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
+        <div
+          className="bg-green-500 h-4 rounded-full transition-all duration-500"
+          style={{
+            width: running 
+              ? `${(currentStepIndex / totalExpectedSteps) * 100}%`
+              : returns.length > 0
+              ? "100%"
+              : "0%"
+          }}
+        ></div>
+      </div>
+    </div>
+    <div className="flex items-center mb-2">
+      <span role="img" aria-label="cost savings" className="mr-2">💰</span>
+      <h3 className="text-xl font-semibold">Cost Savings</h3>
+    </div>
+    <CostSavingsChart returns={returns} />
+  </div>
+
+  {/* Right Column: Aggregated Business Value Summary */}
+<div className="bg-white rounded-xl shadow p-6">
+  <div className="flex items-center mb-2">
+    <span role="img" aria-label="chart" className="mr-2">📊</span>
+    <h3 className="text-xl font-semibold">Aggregated Business Value</h3>
+  </div>
+  {(() => {
+    const totalReturns = returns.length;
+    const totalSteps = returns.reduce((acc, ret) => acc + (ret.steps?.length || 0), 0);
+    const totalRulesTriggered = returns.reduce((acc, ret) => acc + (ret.rulesTriggered?.length || 0), 0);
+    const totalValue = returns.reduce((acc, ret) => acc + (ret.value || 0), 0);
+    const totalCostSavings = returns.reduce((acc, ret) => {
+      if (ret.rulesTriggered && ret.rulesTriggered.includes("Block if Order Older Than 30 Days")) {
+        return acc + ret.value;
+      }
+      return acc;
+    }, 0);
+    
+    const roundedTotalValue = Math.round(totalValue);
+    const roundedTotalCostSavings = Math.round(totalCostSavings);
+    
+    return (
+      <ul className="text-gray-700 text-sm list-disc list-inside space-y-1">
+        <li><span role="img" aria-label="returns" className="mr-2">🔄</span>Total Returns: {totalReturns}</li>
+        <li><span role="img" aria-label="value" className="mr-2">💵</span>Total Value: $ {roundedTotalValue}</li>
+        <li><span role="img" aria-label="cost savings" className="mr-2">💰</span>Total Cost Savings: $ {roundedTotalCostSavings}</li>
+      </ul>
+    );
+  })()}
+</div>
+  
+
+  
 {showJSONRule && (
   <Modal
     title={`JSON: ${showJSONRule.name}`}
@@ -1100,17 +769,6 @@ export default function App() {
           />
         </div>
         <div>
-          <label className="text-sm font-semibold block">Priority</label>
-          <input
-            type="number"
-            className="w-full p-2 border rounded"
-            value={editRule.priority || 1}
-            onChange={(e) =>
-              setEditRule({ ...editRule, priority: Number(e.target.value) })
-            }
-          />
-        </div>
-        <div>
           <label className="text-sm font-semibold block">Phase</label>
           <select
             className="w-full p-2 border rounded"
@@ -1161,21 +819,61 @@ export default function App() {
           />
         </div>
         <button
-          onClick={() => {
-            setRules((prev) =>
-              prev.map((r) => (r.key === editRule.key ? editRule : r))
-            );
-            setEditRule(null);
-          }}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Save
-        </button>
+  onClick={async () => {
+    setSaving(true);
+    await new Promise(res => setTimeout(res, 600)); // Simulate async saving operation
+
+    setRules(prev => prev.map(r => (r.key === editRule.key ? editRule : r)));
+    setEditRule(null);
+    setSaving(false);
+  }}
+  disabled={saving}
+  className={`flex justify-center items-center bg-blue-600 text-white px-4 py-2 rounded ${
+    saving ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700"
+  }`}
+>
+  {saving ? (
+    <svg
+      className="animate-spin h-5 w-5 text-white"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      ></circle>
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v8H4z"
+      ></path>
+    </svg>
+  ) : (
+    "Save"
+  )}
+</button>
       </div>
     )}
     onClose={() => setEditRule(null)}
   />
 )}
+
+{/* Clear All Data Button placed at bottom left */}
+<div className="w-full max-w-[1600px] mx-auto px-6 mt-8 flex justify-start">
+  <button
+    onClick={clearAllData}
+    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+  >
+    Clear All Simulation Data
+  </button>
+</div>
+
+    </div>
     </div>
   );
 }

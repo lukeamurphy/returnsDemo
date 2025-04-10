@@ -28,5 +28,10 @@ export const actions = {
     icon: "🛠️",
     description: "Send damaged items to the repair DC.",
     effect: "repairs"
-  }
+  },
+  require_manual_approval: {
+    label: "Require Manual Approval",
+    description: "Return flagged for manual review",
+    icon: "📝"
+  },
 };

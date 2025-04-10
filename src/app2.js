@@ -236,144 +236,176 @@ export default function App() {
       </div>
 
        {/* Configuration Section */}
-       <h2 className="text-4xl font-bold border-b-2 border-gray-300 pb-2 text-gray-800 mb-6">Configuration</h2>
-      <div className="w-full max-w-[1600px] mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[
-          {
-            key: "orders-box",
-            title: "🧾 Orders",
-            content: (
-              <div>
-                {sampleData.orders.map((order) => (
-                  <div key={order.order_id} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
-                    <p><strong>Order ID:</strong> {order.order_id}</p>
-                    <p><strong>Customer:</strong> {order.customer_name}</p>
-                    <p><strong>Email:</strong> {order.email_address}</p>
-                    <p><strong>Address:</strong> {order.address}</p>
+<h2 className="text-4xl font-bold border-b-2 border-gray-300 pb-2 text-gray-800 mb-6">Configuration</h2>
+<div className="w-full max-w-[1600px] mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+  {[
+    {
+      key: "orders-box",
+      title: "🧾 Orders",
+      content: (
+        <div>
+          {orders.map((order) => (
+            <div key={order.order_id} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
+              <p><strong>Order ID:</strong> {order.order_id}</p>
+              <p><strong>Customer:</strong> {order.customer_name}</p>
+              <p><strong>Email:</strong> {order.email_address}</p>
+              <p><strong>Address:</strong> {order.address}</p>
+              <div className="ml-4 mt-2">
+                <p><strong>Items:</strong></p>
+                {order.items.map((item, i) => (
+                  <div key={i} className="pl-4 border-l mt-2">
+                    <p>SKU: {item.sku}</p>
+                    <p>Name: {item.name}</p>
+                    <p>Quantity: {item.quantity}</p>
+                    <p>Price: ${item.unit_price}</p>
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="mt-2 rounded max-h-32"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
                   </div>
                 ))}
               </div>
-            )
-          },
-          {
-            key: "skus-box",
-            title: "📦 SKUs",
-            content: (
-              <div>
-                {sampleData.skus.map((sku) => (
-                  <div key={sku.sku} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
-                    <p><strong>{sku.product_name}</strong> (SKU: {sku.sku})</p>
-                    <p>Category: {sku.category}</p>
-                    <p>Brand: {sku.brand}</p>
-                    <p>Price: ${sku.price}</p>
-                  </div>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: "skus-box",
+      title: "📦 SKUs",
+      content: (
+        <div>
+          {skus.map((sku) => (
+            <div key={sku.sku} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
+              <p><strong>{sku.product_name}</strong> (SKU: {sku.sku})</p>
+              <p>Category: {sku.category}</p>
+              <p>Brand: {sku.brand}</p>
+              <p>Price: ${sku.price}</p>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: "stores-box",
+      title: "🏬 Stores",
+      content: (
+        <div>
+          {stores.map((store) => (
+            <div key={store.store_id} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
+              <p><strong>{store.store_name}</strong> - {store.location}</p>
+              <p>Capacity: {store.capacity}</p>
+              <p>Returns Enabled: {store.returns_enabled ? "Yes" : "No"}</p>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: "warehouses-box",
+      title: "🏢 Warehouses",
+      content: (
+        <div>
+          {warehouses.map((wh) => (
+            <div key={wh.warehouse_id} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
+              <p><strong>{wh.warehouse_name}</strong> - {wh.location}</p>
+              <p>Capacity: {wh.capacity}</p>
+              <p>Returns Enabled: {wh.returns_enabled ? "Yes" : "No"}</p>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: "carriers-box",
+      title: "🚚 Carriers",
+      content: (
+        <div>
+          {carriers.map((carrier, i) => (
+            <div key={i} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
+              <p><strong>{carrier.carrier_name}</strong></p>
+              <p>Services: {carrier.services.join(", ")}</p>
+              <p>Lead Time: {carrier.lead_time_days} days</p>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: "inventory-box",
+      title: "📊 Inventory",
+      content: (
+        <div>
+          {inventory.map((inv, i) => (
+            <div key={i} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
+              <p><strong>SKU:</strong> {inv.sku}</p>
+              <p>Location ID: {inv.location_id}</p>
+              <p>Quantity: {inv.quantity}</p>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: "rules-box",
+      title: "⚙️ Rules",
+      content: (
+        <ul className="list-disc list-inside text-gray-700">
+          {sampleData.rules.map((rule, i) => <li key={i}>{rule}</li>)}
+        </ul>
+      )
+    },
+    {
+      key: "workflows-box",
+      title: "🔄 Workflows",
+      content: (
+        <div>
+          {sampleData.workflows.map((workflow, i) => (
+            <div key={i} className="mb-4">
+              <p className="font-semibold">{workflow.name}</p>
+              <ul className="list-disc list-inside ml-2">
+                {workflow.ruleKeys.map((ruleKey, idx) => (
+                  <li key={idx} className="text-sm">{ruleKey}</li>
                 ))}
-              </div>
-            )
-          },
-          {
-            key: "stores-box",
-            title: "🏬 Stores",
-            content: (
-              <div>
-                {sampleData.stores.map((store) => (
-                  <div key={store.store_id} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
-                    <p><strong>{store.store_name}</strong> - {store.location}</p>
-                    <p>Capacity: {store.capacity}</p>
-                    <p>Returns Enabled: {store.returns_enabled ? "Yes" : "No"}</p>
-                  </div>
-                ))}
-              </div>
-            )
-          },
-          {
-            key: "warehouses-box",
-            title: "🏢 Warehouses",
-            content: (
-              <div>
-                {sampleData.warehouses.map((wh) => (
-                  <div key={wh.warehouse_id} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
-                    <p><strong>{wh.warehouse_name}</strong> - {wh.location}</p>
-                    <p>Capacity: {wh.capacity}</p>
-                    <p>Returns Enabled: {wh.returns_enabled ? "Yes" : "No"}</p>
-                  </div>
-                ))}
-              </div>
-            )
-          },
-          {
-            key: "carriers-box",
-            title: "🚚 Carriers",
-            content: (
-              <div>
-                {sampleData.carriers.map((carrier, i) => (
-                  <div key={i} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
-                    <p><strong>{carrier.carrier_name}</strong></p>
-                    <p>Services: {carrier.services.join(", ")}</p>
-                    <p>Lead Time: {carrier.lead_time_days} days</p>
-                  </div>
-                ))}
-              </div>
-            )
-          },
-          {
-            key: "inventory-box",
-            title: "📊 Inventory",
-            content: (
-              <div>
-                {sampleData.inventory.map((inv, i) => (
-                  <div key={i} className="mb-4 p-3 bg-gray-50 rounded shadow-sm">
-                    <p><strong>SKU:</strong> {inv.sku}</p>
-                    <p>Location ID: {inv.location_id}</p>
-                    <p>Quantity: {inv.quantity}</p>
-                  </div>
-                ))}
-              </div>
-            )
-          },
-          {
-            key: "rules-box",
-            title: "⚙️ Rules",
-            content: (
-              <ul className="list-disc list-inside text-gray-700">
-                {sampleData.rules.map((rule, i) => <li key={i}>{rule}</li>)}
               </ul>
-            )
-          },
-          {
-            key: "workflows-box",
-            title: "🔄 Workflows",
-            content: (
-              <div>
-                {sampleData.workflows.map((workflow, i) => (
-                  <div key={i} className="mb-4">
-                    <p className="font-semibold">{workflow.name}</p>
-                    <ul className="list-disc list-inside ml-2">
-                    {workflow.ruleKeys.map((ruleKey, idx) => (
-  <li key={idx} className="text-sm">{ruleKey}</li>
-))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )
-          }
-        ].map(({ key, title, content }) => (
-          <div key={key} className="bg-white rounded-xl shadow">
-            <button
-              onClick={() => toggleSection(key)}
-              className="w-full text-left text-xl font-semibold px-4 py-3 border-b rounded-t-xl bg-blue-50 hover:bg-blue-100"
-            >
-              {title}
-            </button>
-            {expandedSections[key] && (
-              <div className="px-4 py-3">
-                {content}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: "financial-box",
+      title: "💰 Financial Model",
+      content: (
+        <div className="text-sm text-gray-700">
+          <p>This section will allow users to configure key financial inputs such as:</p>
+          <ul className="list-disc list-inside mt-2">
+            <li>Cost per return</li>
+            <li>Refund values</li>
+            <li>Processing fees</li>
+          </ul>
+          <p className="mt-2 italic text-gray-500">Coming soon: ROI and cost saving calculations.</p>
+        </div>
+      )
+    }
+  ].map(({ key, title, content }) => (
+    <div key={key} className="bg-white rounded-xl shadow">
+      <button
+        onClick={() => toggleSection(key)}
+        className="w-full text-left text-xl font-semibold px-4 py-3 border-b rounded-t-xl bg-blue-50 hover:bg-blue-100"
+      >
+        {title}
+      </button>
+      {expandedSections[key] && (
+        <div className="px-4 py-3">
+          {content}
+        </div>
+      )}
+    </div>
+  ))}
+</div>
 
       {/* Simulator Section */}
       <h2 className="text-4xl font-bold border-b-2 border-gray-300 pb-2 text-gray-800 mt-12 mb-6">Simulator</h2>
